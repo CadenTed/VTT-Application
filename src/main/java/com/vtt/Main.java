@@ -90,6 +90,36 @@ public class Main extends Application {
         System.out.println("- Use sidebar to select token type");
     }
 
+    private Button createNoneSelectedButton() {
+        Button button = new Button();
+        button.setPrefWidth(SIDEBAR_WIDTH - 30);
+        button.setPrefHeight(50);
+
+        Circle noTokenIcon = new Circle(12);
+        noTokenIcon.setFill(Color.TRANSPARENT);
+        noTokenIcon.setStroke(Color.GRAY);
+        noTokenIcon.setStrokeWidth(2);
+        noTokenIcon.getStrokeDashArray().addAll(5d, 5d);
+
+        Label typeLabel = new Label("None");
+        typeLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 10px;");
+
+        VBox buttonContent = new VBox(5);
+        buttonContent.getChildren().addAll(noTokenIcon, typeLabel);
+        buttonContent.setStyle("-fx-alignment: center;");
+
+        button.setGraphic(buttonContent);
+
+        button.setOnAction(event -> {
+            currentTokenType = null;
+            statusLabel.setText("Current Token: None");
+            updateButtonSelection();
+            System.out.println("No token type selected");
+        });
+
+        return button;
+    }
+
     private VBox createStatusPanel() {
         VBox panel = new VBox(5);
         panel.setStyle("-fx-padding: 10; -fx-background-color: #f0f0f0;");
@@ -114,6 +144,11 @@ public class Main extends Application {
         panel.getChildren().add(title);
 
         panel.getChildren().add(new Separator());
+
+        // Add "None Selected" button first
+        Button noneButton = createNoneSelectedButton();
+        tokenTypeButtons.add(noneButton);
+        panel.getChildren().add(noneButton);
 
         // Create buttons for each token type
         for (TokenType tokenType : TokenType.values()) {
@@ -162,9 +197,18 @@ public class Main extends Application {
     private void updateButtonSelection() {
         for (int i = 0; i < tokenTypeButtons.size(); i++) {
             Button button = tokenTypeButtons.get(i);
-            TokenType buttonType = TokenType.values()[i];
 
-            if (buttonType == currentTokenType) {
+            boolean isSelected;
+            if (i == 0) {
+                // First button is "None Selected"
+                isSelected = (currentTokenType == null);
+            }
+            else {
+                TokenType buttonType = TokenType.values()[i - 1];
+                isSelected = (currentTokenType == buttonType);
+            }
+
+            if (isSelected) {
                 button.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-border-color: #45a049; -fx-border-width: 2;");
             } else {
                 button.setStyle("-fx-background-color: #f9f9f9; -fx-text-fill: black; -fx-border-color: #ddd; -fx-border-width: 1;");
@@ -245,7 +289,7 @@ public class Main extends Application {
             draggedToken = null;
             isDragging = false;
             drawBattlemap();
-        } else if (!isDragging) {
+        } else if (!isDragging && currentTokenType != null) {
             // Regular click - place new token
             int gridX = (int) (event.getX() / GRID_SIZE);
             int gridY = (int) (event.getY() / GRID_SIZE);
@@ -274,7 +318,8 @@ public class Main extends Application {
             drawBattlemap();
 
             // Show preview only if no token exists at this location
-            if (gridX >= 0 && gridX < CANVAS_WIDTH / GRID_SIZE &&
+            if (currentTokenType != null &&
+                    gridX >= 0 && gridX < CANVAS_WIDTH / GRID_SIZE &&
                     gridY >= 0 && gridY < CANVAS_HEIGHT / GRID_SIZE &&
                     !hasTokenAt(gridX, gridY)) {
 
@@ -357,14 +402,14 @@ public class Main extends Application {
         }
 
         gc.setFill(Color.DARKBLUE);
-        gc.setFont(Font.font(10));
-
-        for (int x = 0; x < CANVAS_WIDTH / GRID_SIZE; x++) {
-            for (int y = 0; y < CANVAS_HEIGHT / GRID_SIZE; y++) {
-                String coords = x + "," + y;
-                gc.fillText(coords, x * GRID_SIZE + 2, y * GRID_SIZE + 12);
-            }
-        }
+//        gc.setFont(Font.font(10));
+//
+//        for (int x = 0; x < CANVAS_WIDTH / GRID_SIZE; x++) {
+//            for (int y = 0; y < CANVAS_HEIGHT / GRID_SIZE; y++) {
+//                String coords = x + "," + y;
+//                gc.fillText(coords, x * GRID_SIZE + 2, y * GRID_SIZE + 12);
+//            }
+//        }
     }
 
     private void drawToken(Token token) {
