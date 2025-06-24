@@ -42,6 +42,7 @@ public class Main extends Application {
     private double dragStartX, dragStartY;
     private double dragOffsetX, dragOffsetY;
     private boolean isDragging = false;
+    private boolean isShifting = false;
 
     // UI Components
     private VBox tokenSelectionPanel;
@@ -190,6 +191,7 @@ public class Main extends Application {
             tokens.remove(clickedToken);
             System.out.printf("Removed %s token from (%d, %d)%n",
                     clickedToken.getType().name(), gridX, gridY);
+            isShifting = true;
             drawBattlemap();
         } else if (clickedToken != null && event.getButton() == MouseButton.PRIMARY) {
             // Start dragging existing token
@@ -247,7 +249,10 @@ public class Main extends Application {
             // Regular click - place new token
             int gridX = (int) (event.getX() / GRID_SIZE);
             int gridY = (int) (event.getY() / GRID_SIZE);
-
+            if (isShifting) {
+                isShifting = false;
+                return;
+            }
             if (gridX >= 0 && gridX < CANVAS_WIDTH / GRID_SIZE &&
                     gridY >= 0 && gridY < CANVAS_HEIGHT / GRID_SIZE &&
                     !hasTokenAt(gridX, gridY)) {
