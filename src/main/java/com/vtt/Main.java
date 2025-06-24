@@ -4,6 +4,7 @@ import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.VBox;
@@ -27,19 +28,6 @@ public class Main extends Application {
     private List<Token> tokens = new ArrayList<>();
     private TokenType currentTokenType = TokenType.PLAYER;
     private Label statusLabel;
-
-
-    // Token class to store token data
-    static class Token {
-        int gridX, gridY;
-        TokenType type;
-
-        Token(int gridX, int gridY, TokenType type) {
-            this.gridX = gridX;
-            this.gridY = gridY;
-            this.type = type;
-        }
-    }
 
     @Override
     public void start(Stage primaryStage) {
@@ -135,26 +123,26 @@ public class Main extends Application {
 
     private void drawToken(Token token) {
         // Convert grid coordinates to pixel coordinates (top-left of grid square)
-        double pixelX = token.gridX * GRID_SIZE;
-        double pixelY = token.gridY * GRID_SIZE;
+        double pixelX = token.getGridX() * GRID_SIZE;
+        double pixelY = token.getGridY() * GRID_SIZE;
 
         // Center the token in the grid square
         double centerX = pixelX + GRID_SIZE / 2.0;
         double centerY = pixelY + GRID_SIZE / 2.0;
 
         // Draw the token circle
-        gc.setFill(token.type.getColor());
+        gc.setFill(token.getType().getColor());
         gc.fillOval(centerX - 15, centerY - 15, 30, 30);
 
         // Add a border (darker version of the same color)
-        gc.setStroke(token.type.getColor().darker());
+        gc.setStroke(token.getType().getColor().darker());
         gc.setLineWidth(2);
         gc.strokeOval(centerX - 15, centerY - 15, 30, 30);
 
         // Add the token label
         gc.setFill(Color.WHITE);
         gc.setFont(javafx.scene.text.Font.font(12));
-        gc.fillText(token.type.getLabel(), centerX - 4, centerY + 4);
+        gc.fillText(token.getType().getLabel(), centerX - 4, centerY + 4);
     }
 
     private void onMouseMoved(MouseEvent event) {
@@ -196,15 +184,24 @@ public class Main extends Application {
     }
 
     private boolean hasTokenAt(int gridX, int gridY) {
-        return tokens.stream().anyMatch(token ->
-                token.gridX == gridX && token.gridY == gridY);
+        Token foundToken = null;
+        for (Token token : tokens) {
+            if (token.getGridX() == gridX && token.getGridY() == gridY) {
+                foundToken = token;
+            }
+        }
+        return foundToken != null;
     }
 
     private Token getTokenAt(int gridX, int gridY) {
-        return tokens.stream()
-                .filter(token -> token.gridX == gridX && token.gridY == gridY)
-                .findFirst()
-                .orElse(null);
+        Token foundToken = null;
+
+        for (Token token : tokens) {
+            if (token.getGridX() == gridX && token.getGridY() == gridY) {
+                foundToken = token;
+            }
+        }
+        return foundToken;
     }
 
     private void onMouseClicked(MouseEvent event) {
@@ -219,14 +216,16 @@ public class Main extends Application {
         }
 
         if (event.isShiftDown()) {
+            System.out.println("Shift key pressed");
             // Shift + click: Remove token
             Token tokenToRemove = getTokenAt(gridX, gridY);
+            System.out.printf("Token Location (%d,%d)", tokenToRemove.getGridX(), tokenToRemove.getGridY());
             if (tokenToRemove != null) {
                 tokens.remove(tokenToRemove);
                 System.out.printf("Removed %s token from (%d, %d)%n",
-                        tokenToRemove.type.name(), gridX, gridY);
+                        tokenToRemove.getType().name(), gridX, gridY);
             }
-        } else if (event.isSecondaryButtonDown()) {
+        } else if (event.getButton() == MouseButton.SECONDARY) {
             // Right-click: Cycle token type
             TokenType[] types = TokenType.values();
             int currentIndex = currentTokenType.ordinal();
@@ -239,7 +238,11 @@ public class Main extends Application {
                 Token newToken = new Token(gridX, gridY, currentTokenType);
                 tokens.add(newToken);
                 System.out.printf("Placed %s token at (%d, %d)%n",
-                        currentTokenType.name(), gridX, gridY);
+                        currentTokenType.getLabel(), newToken.getGridX(), newToken.getGridY());
+                System.out.println("All current tokens:");
+                for (Token token : tokens) {
+                    System.out.printf("%s at (%d, %d)%n", token.getType().getLabel(), token.getGridX(), token.getGridY());
+                }
             } else {
                 System.out.printf("Square (%d, %d) already occupied!%n", gridX, gridY);
             }
