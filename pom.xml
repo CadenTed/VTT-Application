@@ -26,6 +26,11 @@
       <artifactId>javafx-fxml</artifactId>
       <version>24.0.1</version>
     </dependency>
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>3.0.0</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -46,6 +51,19 @@
         <version>0.0.8</version>
         <configuration>
           <mainClass>com.vtt.Main</mainClass>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.openjfx</groupId>
+        <artifactId>javafx-maven-plugin</artifactId>
+        <version>0.0.8</version>
+        <configuration>
+          <mainClass>com.vtt.Main</mainClass>
+          <commandlineArgs>
+            --enable-native-access=javafx.graphics
+            --add-opens java.base/sun.misc=ALL-UNNAMED
+          </commandlineArgs>
         </configuration>
       </plugin>
     </plugins>

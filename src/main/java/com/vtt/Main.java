@@ -2,24 +2,35 @@ package com.vtt;
 
 import javafx.application.Application;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.Separator;
+import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.Loader;
+
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import javax.imageio.ImageIO;
 
 public class Main extends Application {
 
@@ -44,6 +55,24 @@ public class Main extends Application {
     private boolean isDragging = false;
     private boolean isShifting = false;
 
+    // PDF Viewer Components
+    private VBox pdfPanel;
+    private ScrollPane pdfScrollPane;
+    private ImageView pdfImageView;
+    private Label pdfStatusLabel;
+    private Button prevPageButton, nextPageButton;
+    private Label pageInfoLabel;
+    private TextField searchField;
+    private Button searchButton;
+
+    // PDF State
+
+    private PDDocument currentPdfDocument;
+    private PDFRenderer pdfRenderer;
+    private int currentPage = 0;
+    private int totalPages = 0;
+    private String currentPdfName = "";
+
     // UI Components
     private VBox tokenSelectionPanel;
     private List<Button> tokenTypeButtons = new ArrayList<>();
@@ -52,42 +81,231 @@ public class Main extends Application {
     public void start(Stage primaryStage) {
         BorderPane root = new BorderPane();
 
-        // Create status panel (top)
-        VBox statusPanel = createStatusPanel();
-        root.setTop(statusPanel);
+        pdfPanel = createPdfPanel();
+        root.setLeft(pdfPanel);
 
         // Create canvas (center)
+        VBox centerPanel = new VBox();
+
+        // Create status panel (top)
+        VBox statusPanel = createStatusPanel();
+        centerPanel.getChildren().add(statusPanel);
+
+        // Canvas
         canvas = new Canvas(CANVAS_WIDTH, CANVAS_HEIGHT);
         gc = canvas.getGraphicsContext2D();
-
-        // Set up mouse event handling
         setupMouseHandlers();
+        centerPanel.getChildren().add(canvas);
 
-        // Create token selection sidebar (right)
+        root.setCenter(centerPanel);
+
+        // Token selection sidebar
         tokenSelectionPanel = createTokenSelectionPanel();
         root.setRight(tokenSelectionPanel);
-
-        // Add some example tokens to start
+        
         tokens.add(new Token(2, 1, TokenType.PLAYER));
         tokens.add(new Token(5, 3, TokenType.MONSTER));
         tokens.add(new Token(8, 2, TokenType.NPC));
 
-        // Initial draw
         drawBattlemap();
 
-        root.setCenter(canvas);
-
-        // Create and show the scene
-        Scene scene = new Scene(root, CANVAS_WIDTH + SIDEBAR_WIDTH + 40, CANVAS_HEIGHT + 80);
-        primaryStage.setTitle("VTT Battlemap - Drag & Drop + Selection Bar");
+        Scene scene = new Scene(root, 1350, 850);
+        primaryStage.setTitle("VTT");
         primaryStage.setScene(scene);
         primaryStage.show();
+    }
 
-        System.out.println("Enhanced Battlemap ready!");
-        System.out.println("- Left-click: Place token");
-        System.out.println("- Drag tokens to move them");
-        System.out.println("- Shift+click: Remove token");
-        System.out.println("- Use sidebar to select token type");
+    private VBox createPdfPanel() {
+        VBox pdfPanel = new VBox(10);
+        pdfPanel.setPadding(new Insets(10));
+        pdfPanel.setPrefWidth(350);
+        pdfPanel.setStyle("-fx-background-color: #f8f8f8; -fx-border-color: #cccccc; -fx-border-width: 0 1 0 0;");
+
+        Label title = new Label("PDF Viewer");
+        title.setFont(Font.font("System", FontWeight.BOLD, 16));
+
+        Button loadPdfButton = new Button("Load PDF");
+        loadPdfButton.setOnAction(e -> loadPdfFile());
+
+        pdfStatusLabel = new Label("No PDF Loaded");
+        pdfStatusLabel.setStyle("-fx-text-fill: #666666");
+
+        HBox searchBox = new HBox(5);
+        searchField = new TextField();
+        searchField.setPromptText("Search PDF content...");
+        searchField.setPrefWidth(200);
+        searchButton = new Button("Search");
+        searchButton.setOnAction(e -> searchPdf());
+        searchField.setOnAction(e -> searchPdf());
+
+        searchBox.getChildren().addAll(searchField, searchButton);
+
+        // Page navigation
+        HBox pageControls = new HBox(10);
+        prevPageButton = new Button("◀ Prev");
+        nextPageButton = new Button("Next ▶");
+        pageInfoLabel = new Label("Page: -/-");
+
+        prevPageButton.setOnAction(e -> previousPage());
+        nextPageButton.setOnAction(e -> nextPage());
+
+        pageControls.getChildren().addAll(prevPageButton, pageInfoLabel, nextPageButton);
+
+        // Disable controls initially
+        disablePdfControls();
+
+        // PDF display area
+        pdfImageView = new ImageView();
+        pdfImageView.setPreserveRatio(true);
+        pdfImageView.setFitWidth(330);
+
+        pdfScrollPane = new ScrollPane(pdfImageView);
+        pdfScrollPane.setPrefHeight(400);
+        pdfScrollPane.setStyle("-fx-background-color: white;");
+
+        pdfPanel.getChildren().addAll(
+                title,
+                loadPdfButton,
+                pdfStatusLabel,
+                new Separator(),
+                searchBox,
+                pageControls,
+                pdfScrollPane
+        );
+
+        return pdfPanel;
+    }
+
+    private void loadPdfFile() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select PDF Rulebook");
+        fileChooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("PDF Files", "*.pdf")
+        );
+
+        File selectedFile = fileChooser.showOpenDialog(null);
+        if (selectedFile != null) {
+            try {
+                // Close previous document if open
+                if (currentPdfDocument != null) {
+                    currentPdfDocument.close();
+                }
+
+                // Load new PDF
+                currentPdfDocument = Loader.loadPDF(selectedFile);
+                pdfRenderer = new PDFRenderer(currentPdfDocument);
+                totalPages = currentPdfDocument.getNumberOfPages();
+                currentPage = 0;
+                currentPdfName = selectedFile.getName();
+
+                // Update UI
+                pdfStatusLabel.setText("Loaded: " + currentPdfName);
+                enablePdfControls();
+                displayCurrentPage();
+
+                System.out.println("Loaded PDF: " + currentPdfName + " (" + totalPages + " pages)");
+
+            } catch (IOException e) {
+                showAlert("Error", "Failed to load PDF: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void displayCurrentPage() {
+        if (currentPdfDocument == null) return;
+
+        try {
+            // Render the current page
+            BufferedImage bufferedImage = pdfRenderer.renderImageWithDPI(currentPage, 150);
+
+            // Convert BufferedImage to JavaFX Image
+            ByteArrayOutputStream byteOutput = new ByteArrayOutputStream();
+            ImageIO.write(bufferedImage, "png", byteOutput);
+            ByteArrayInputStream byteInput = new ByteArrayInputStream(byteOutput.toByteArray());
+            Image fxImage = new Image(byteInput);
+
+            // Display the image
+            pdfImageView.setImage(fxImage);
+
+            // Update page info
+            pageInfoLabel.setText(String.format("Page: %d/%d", currentPage + 1, totalPages));
+
+            // Update button states
+            prevPageButton.setDisable(currentPage <= 0);
+            nextPageButton.setDisable(currentPage >= totalPages - 1);
+
+        } catch (IOException e) {
+            showAlert("Error", "Failed to display page: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void previousPage() {
+        if (currentPage > 0) {
+            currentPage--;
+            displayCurrentPage();
+        }
+    }
+
+    private void nextPage() {
+        if (currentPage < totalPages - 1) {
+            currentPage++;
+            displayCurrentPage();
+        }
+    }
+
+    private void searchPdf() {
+        String searchText = searchField.getText().trim();
+        if (searchText.isEmpty() || currentPdfDocument == null) {
+            return;
+        }
+
+        try {
+            // Simple search implementation - you could enhance this
+            boolean found = false;
+            for (int pageNum = 1; pageNum < totalPages; pageNum++) {
+                String pageText = currentPdfDocument.getPage(pageNum).getContents().toString();
+                System.out.println(pageText.toString());
+                if (pageText.toLowerCase().contains(searchText.toLowerCase())) {
+                    currentPage = pageNum;
+                    displayCurrentPage();
+                    found = true;
+                    System.out.println("Found '" + searchText + "' on page " + (pageNum + 1));
+                    break;
+                }
+            }
+
+            if (!found) {
+                showAlert("Search", "Text '" + searchText + "' not found in remaining pages.");
+            }
+
+        } catch (Exception e) {
+            showAlert("Error", "Search failed: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void enablePdfControls() {
+        prevPageButton.setDisable(false);
+        nextPageButton.setDisable(false);
+        searchButton.setDisable(false);
+        searchField.setDisable(false);
+    }
+
+    private void disablePdfControls() {
+        prevPageButton.setDisable(true);
+        nextPageButton.setDisable(true);
+        searchButton.setDisable(true);
+        searchField.setDisable(true);
+    }
+
+    private void showAlert(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
     private Button createNoneSelectedButton() {
